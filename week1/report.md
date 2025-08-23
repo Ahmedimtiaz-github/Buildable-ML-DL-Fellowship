@@ -4,4 +4,4 @@
 **Branch:** week1-assignment  
 **Date:** 2025-08-22
 
-(Report contents and screenshot references are in this file. The PDF version `report.pdf` is also included.)
+This file contains the report for Week 1. The PDF `week1/report.pdf` is also included.
