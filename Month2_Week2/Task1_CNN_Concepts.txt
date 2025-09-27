@@ -1,0 +1,45 @@
+1: What are the advantages of convolutional layers over fully connected layers in image processing tasks?
+
+Convolutional layers exploit spatial locality: they focus on local regions of the image rather than connecting every pixel to every neuron.
+
+They require fewer parameters compared to fully connected layers, reducing overfitting.
+
+They are translation-invariant (detect patterns regardless of where they appear in the image).
+
+Enable hierarchical feature learning (edges → textures → objects).
+
+Q2: How does pooling help in reducing the computational complexity of a CNN?
+
+Pooling layers downsample feature maps by summarizing regions (e.g., taking max/average).
+
+This reduces the spatial dimensions of the data, which cuts down:
+
+the number of parameters,
+
+memory usage, and
+
+computation in subsequent layers.
+
+Pooling also provides a form of translation invariance, making the model less sensitive to small shifts.
+
+Q3: Compare different types of pooling layers (max pooling, average pooling). What are their respective advantages and disadvantages?
+
+Max Pooling
+
+Takes the maximum value in each region.
+
+Preserves sharp, prominent features (like edges).
+
+Advantage: keeps strongest activations → good for classification.
+
+Disadvantage: may lose contextual/average information.
+
+Average Pooling
+
+Takes the mean of values in each region.
+
+Provides a smoother, generalized feature map.
+
+Advantage: captures overall statistics.
+
+Disadvantage: may dilute strong features → less effective for tasks needing sharp detection.
