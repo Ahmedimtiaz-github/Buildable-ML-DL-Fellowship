@@ -1,0 +1,4 @@
+,MSE,R2
+LinearRegression,8606.923,0.128
+Ridge,8607.992,0.128
+RandomForest,9215.31,0.066
