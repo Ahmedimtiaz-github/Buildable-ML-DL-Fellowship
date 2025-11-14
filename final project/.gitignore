@@ -1,0 +1,33 @@
+﻿# Ignore processed images (large)
+data/processed/plant_disease/
+data/processed/plant_disease/**
+
+# Ignore raw dataset zips (if any)
+*.zip
+data/*/*.zip
+
+# Models and large binaries (don't commit heavy model files)
+models/
+models/** 
+*.h5
+*.pt
+*.pth
+*.ckpt
+
+# Optionally ignore raw big dataset folders (if you put raw images here)
+data/plant_disease_raw/
+data/raw/
+
+# Virtual envs and python caches
+venv/
+env/
+__pycache__/
+*.pyc
+.ipynb_checkpoints
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
