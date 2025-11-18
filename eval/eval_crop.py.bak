@@ -1,0 +1,118 @@
+﻿# --- INSERTED: robust_model_loader for crop eval ---
+import joblib, pickle, os
+def robust_load_crop_model(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"crop model not found: {path}")
+    # try joblib then pickle
+    try:
+        m = joblib.load(path)
+    except Exception:
+        with open(path, "rb") as fh:
+            m = pickle.load(fh)
+    # if dict, attempt to pull actual model and helpers
+    if isinstance(m, dict):
+        # common keys
+        for k in ("model","estimator","clf","sklearn_model"):
+            if k in m:
+                real = m[k]
+                # keep metadata too
+                m = {"model": real, **m}
+                break
+        # if still dict but has model as key, nothing to do
+        if "model" in m and not hasattr(m["model"], "predict"):
+            # last attempt: if the object itself is a scikit wrapper under a known key
+            for k in m.keys():
+                if hasattr(m[k], "predict"):
+                    m = {"model": m[k], **m}
+                    break
+    # normalize: return dict with 'model' and optional scaler/feature_columns/encoders
+    if hasattr(m, "predict"):
+        return {"model": m}
+    if isinstance(m, dict) and "model" in m and hasattr(m["model"], "predict"):
+        return m
+    raise RuntimeError(f"Loaded crop model object from {path} does not expose .predict(); type={type(m)}")
+# --- END INSERT ---
+# eval/eval_crop.py
+import os, json, argparse, joblib
+import numpy as np, pandas as pd
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
+import matplotlib.pyplot as plt
+
+def main(args):
+    out_dir = args.out
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Load model
+    model_path = args.model or "models/crop_predictor.pkl"
+    if not os.path.exists(model_path):
+        print(f"Model not found: {model_path}. Exiting.")
+        return
+
+    model = joblib.load(model_path)
+
+    # Load test CSV (expects last column 'label' and features columns)
+    test_csv = args.test or "data/crop_test.csv"
+    if not os.path.exists(test_csv):
+        print(f"Test CSV not found: {test_csv}. Exiting.")
+        return
+
+    df = pd.read_csv(test_csv)
+    if 'label' not in df.columns:
+        print("Test CSV must contain 'label' column.")
+        return
+
+    X = df.drop(columns=['label'])
+    y = df['label'].values
+
+    # predict
+    try:
+        ypred = model.predict(X)
+    except Exception as e:
+        print("Model predict failed:", e)
+        return
+
+    acc = accuracy_score(y, ypred)
+    p, r, f1, _ = precision_recall_fscore_support(y, ypred, average='weighted', zero_division=0)
+    cm = confusion_matrix(y, ypred)
+    metrics = {"accuracy": float(acc), "precision": float(p), "recall": float(r), "f1": float(f1)}
+
+    # save metrics
+    with open(os.path.join(out_dir, "crop_metrics.json"), "w") as fh:
+        json.dump(metrics, fh, indent=2)
+    print("Saved metrics to:", os.path.join(out_dir, "crop_metrics.json"))
+
+    # save confusion matrix plot
+    plt.figure(figsize=(6,6))
+    plt.imshow(cm, interpolation='nearest', cmap='Blues')
+    plt.title("Crop Confusion Matrix")
+    plt.colorbar()
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "crop_confusion_matrix.png"))
+    plt.close()
+    print("Saved confusion matrix plot.")
+
+    # feature importances if available
+    if hasattr(model, "feature_importances_"):
+        fi = model.feature_importances_
+        cols = X.columns.tolist()
+        idx = np.argsort(fi)[::-1][:20]
+        plt.figure(figsize=(8,6))
+        plt.barh([cols[i] for i in idx[::-1]], fi[idx[::-1]])
+        plt.title("Top feature importances")
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "crop_feature_importances.png"))
+        plt.close()
+        print("Saved feature importances.")
+    else:
+        print("Model has no feature_importances_ attribute.")
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", help="Path to crop model (.pkl)", default=None)
+    parser.add_argument("--test", help="CSV test file (must have 'label')", default=None)
+    parser.add_argument("--out", help="Output folder", default="reports/eval/crop")
+    args = parser.parse_args()
+    main(args)
+
+

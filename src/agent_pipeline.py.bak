@@ -1,0 +1,142 @@
+﻿# src/agent_pipeline.py
+"""
+Agent pipeline with three tools:
+ - disease_detector_tool(image_path)  -> uses TF Keras model (lazy-loaded)
+ - crop_predictor_tool(features)      -> loads sklearn model (lazy-loaded)
+ - rag_qa_tool(...)                   -> calls src.rag_tool.rag_qa_tool (lazy-imported)
+
+Main entry: query_agent(query, image_path=None, top_k=5, llm="auto") -> dict
+Return fields: tool_used, tool_input, tool_output, reasoning_text
+"""
+import os, json, traceback
+from typing import Optional, Dict, Any
+
+REPO_ROOT = Path = os.path.dirname(os.path.dirname(__file__)) if os.path.dirname(__file__) else "."
+MODELS_DIR = os.path.abspath(os.path.join(REPO_ROOT, "models"))
+
+# ---------- Helper: lazy rag import ----------
+def _lazy_rag():
+    # import only when needed
+    from src.rag_tool import rag_qa_tool
+    return rag_qa_tool
+
+# ---------- disease detector (lazy) ----------
+def disease_detector_tool(image_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Returns structured dict. Loads TF model only when called.
+    If model missing, returns an informative dict (no crash).
+    """
+    model_name = "disease_efficientnet_final.h5"
+    model_path = os.path.join(MODELS_DIR, model_name)
+    if not os.path.exists(model_path):
+        return {"error": "disease model not found", "model_path": model_path}
+
+    if not image_path:
+        return {"error": "no image_path provided"}
+
+    try:
+        # lazy imports
+        from tensorflow.keras.models import load_model
+        from tensorflow.keras.preprocessing import image as kimage
+        import numpy as np
+
+        model = load_model(model_path)
+        img = kimage.load_img(image_path, target_size=(224, 224))
+        arr = kimage.img_to_array(img) / 255.0
+        arr = np.expand_dims(arr, 0)
+        preds = model.predict(arr)
+        return {"preds": preds.tolist()}
+    except Exception as e:
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+# ---------- crop predictor (lazy) ----------
+def crop_predictor_tool(features: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Expects features as a dict (e.g., {"ph":6.5, "rainfall":100, ...}).
+    Loads the sklearn model lazily. If model missing or fails, returns error dict.
+    """
+    model_file = os.path.join(MODELS_DIR, "crop_predictor.pkl")
+    if not os.path.exists(model_file):
+        return {"error": "crop predictor model not found", "model_file": model_file}
+    try:
+        import joblib
+        model = joblib.load(model_file)
+        # determine features order:
+        if hasattr(model, "feature_names_in_"):
+            cols = list(model.feature_names_in_)
+        else:
+            # fallback: use provided feature keys in sorted order
+            cols = sorted(list(features.keys()))
+        X = [[float(features.get(c, 0.0)) for c in cols]]
+        pred = model.predict(X)
+        return {"prediction": str(pred[0]), "features_used": cols}
+    except Exception as e:
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+# ---------- Agent routing logic ----------
+def query_agent(query: str, image_path: Optional[str] = None, top_k: int = 5, llm: str = "auto") -> Dict[str, Any]:
+    """
+    Rule-based routing:
+     - If image_path supplied OR query contains plant/leaf/disease terms -> disease_detector_tool
+     - If query mentions soil/weather/what to plant -> crop_predictor_tool
+     - else -> rag_qa_tool
+    Returns a dict with: tool_used, tool_input, tool_output, reasoning_text
+    """
+    q = (query or "").lower()
+    disease_keywords = ["leaf", "plant", "disease", "blight", "mildew", "rust", "spots", "lesion"]
+    crop_keywords = ["soil", "pH", "ph", "what to plant", "fertilizer", "fertiliser", "planting", "crop", "sow", "seed"]
+
+    tool_used = None
+    tool_input = None
+    tool_output = None
+    reasoning = ""
+
+    # Priority: image -> disease tool
+    if image_path:
+        tool_used = "disease_detector_tool"
+        tool_input = {"image_path": image_path, "query": query}
+        tool_output = disease_detector_tool(image_path)
+        reasoning = "Image attached; prefer disease detector."
+        return _wrap(tool_used, tool_input, tool_output, reasoning)
+
+    # check disease keywords
+    if any(k in q for k in disease_keywords):
+        tool_used = "disease_detector_tool"
+        tool_input = {"image_path": None, "query": query}
+        tool_output = disease_detector_tool(None)  # will return helpful error if no image
+        reasoning = "Query contains plant/disease-related keywords; chose disease_detector_tool."
+        return _wrap(tool_used, tool_input, tool_output, reasoning)
+
+    # check crop/soil keywords
+    if any(k.lower() in q for k in [kk.lower() for kk in crop_keywords]):
+        tool_used = "crop_predictor_tool"
+        # very small parser: user should supply explicit numeric features for accurate prediction.
+        # Here we return the tool result using empty features; front-end can parse and re-call with features.
+        parsed_features = {}
+        tool_input = {"features": parsed_features, "query": query}
+        tool_output = crop_predictor_tool(parsed_features)
+        reasoning = "Query mentions soil/weather/planting -> routed to crop_predictor_tool."
+        return _wrap(tool_used, tool_input, tool_output, reasoning)
+
+    # fallback: RAG
+    tool_used = "rag_qa_tool"
+    tool_input = {"question": query, "top_k": top_k, "llm": llm}
+    try:
+        rag = _lazy_rag()
+        rag_res = rag(query, top_k=top_k, llm=llm)
+        tool_output = rag_res
+        reasoning = "No domain keywords detected -> fallback to RAG retrieval+QA."
+    except Exception as e:
+        tool_output = {"error": str(e), "trace": traceback.format_exc()}
+        reasoning = "RAG call failed; returned error in tool_output."
+
+    return _wrap(tool_used, tool_input, tool_output, reasoning)
+
+# small helper to keep responses uniform
+def _wrap(tool_used, tool_input, tool_output, reasoning):
+    return {
+        "tool_used": tool_used,
+        "tool_input": tool_input,
+        "tool_output": tool_output,
+        "reasoning_text": reasoning
+    }

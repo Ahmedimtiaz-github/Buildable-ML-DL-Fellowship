@@ -1,0 +1,67 @@
+﻿# src/rag_demo.py (robust importer)
+"""
+Demo for RAG tool — imports rag_tool via importlib to avoid package import collisions.
+Saves outputs to reports/rag_demo_output.txt
+"""
+from pathlib import Path
+import sys
+import os
+import json
+import importlib
+
+# ensure repo root is on sys.path
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+# dynamic import to avoid ImportError problems with package resolution
+try:
+    rag_mod = importlib.import_module("src.rag_tool")
+except Exception as e:
+    # try importing module by file path (fallback)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("src.rag_tool", str(REPO_ROOT / "src" / "rag_tool.py"))
+    rag_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rag_mod)
+
+# get rag_qa_tool safely
+if not hasattr(rag_mod, "rag_qa_tool"):
+    raise ImportError("rag_tool module loaded but 'rag_qa_tool' not found. Please check src/rag_tool.py")
+
+rag_qa_tool = getattr(rag_mod, "rag_qa_tool")
+
+REPORTS_DIR = REPO_ROOT / "reports"
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+OUT_FILE = REPORTS_DIR / "rag_demo_output.txt"
+
+SAMPLE_QUERIES = [
+    "best time to plant rice",
+    "how to treat early blight on tomato",
+    "recommended fertilizer for wheat at heading stage",
+]
+
+def choose_llm():
+    # 'auto' delegates to rag_qa_tool: uses OpenAI only if a valid key is present, otherwise local
+    return "auto"
+
+def main():
+    llm = choose_llm()
+    print(f"[INFO] using llm backend: {llm}")
+    outputs = []
+    for q in SAMPLE_QUERIES:
+        print(f"[QUERY] {q}")
+        res = rag_qa_tool(q, top_k=5, llm=llm)  # use 'auto' to avoid invalid-key crashes
+        print("-> answer (first 400 chars):")
+        print(res["answer"][:400] if res["answer"] else "<no answer>")
+        print("-> sources:")
+        for s in res["sources"]:
+            print(f"   {s['id']} (score={s['score']:.4f}) {s['text_snippet'][:120]}")
+        print("-" * 60)
+        outputs.append({"query": q, "result": res})
+
+    with open(OUT_FILE, "w", encoding="utf8") as fh:
+        json.dump(outputs, fh, ensure_ascii=False, indent=2)
+    print(f"[SAVED] demo outputs to {OUT_FILE}")
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,30 @@
+Validation report for logreg
+              precision    recall  f1-score   support
+
+       apple     0.0000    0.0000    0.0000        15
+      banana     0.0000    0.0000    0.0000        15
+   blackgram     0.1667    0.0667    0.0952        15
+    chickpea     0.0000    0.0000    0.0000        15
+     coconut     0.0000    0.0000    0.0000        15
+      coffee     0.0000    0.0000    0.0000        15
+      cotton     0.0000    0.0000    0.0000        15
+      grapes     0.0000    0.0000    0.0000        15
+        jute     0.0000    0.0000    0.0000        15
+ kidneybeans     0.0000    0.0000    0.0000        15
+      lentil     0.0000    0.0000    0.0000        15
+       maize     0.0000    0.0000    0.0000        15
+       mango     0.0536    1.0000    0.1017        15
+   mothbeans     0.0000    0.0000    0.0000        15
+    mungbean     0.0000    0.0000    0.0000        15
+   muskmelon     0.0000    0.0000    0.0000        15
+         nan     0.8873    0.4516    0.5986       279
+      orange     0.0000    0.0000    0.0000        15
+      papaya     0.0000    0.0000    0.0000        15
+  pigeonpeas     0.0000    0.0000    0.0000        15
+ pomegranate     0.0000    0.0000    0.0000        15
+        rice     0.0000    0.0000    0.0000        15
+  watermelon     0.0000    0.0000    0.0000        15
+
+    accuracy                         0.2332       609
+   macro avg     0.0482    0.0660    0.0346       609
+weighted avg     0.4119    0.2332    0.2791       609

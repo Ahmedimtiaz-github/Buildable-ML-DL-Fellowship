@@ -1,5 +1,39 @@
-venv/
+﻿# Python & project
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+
+# Virtualenv
+venv/
+env/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+.output/
+
+# System files
 .DS_Store
+Thumbs.db
+
+# Data / large local files (do not commit raw datasets)
+data/plant_disease/
+data/processed/
+*.zip
+
+# Logs / reports (you can remove this line if you want reports committed)
+# reports/
+
+# OS files
+*.log
+
+# Editor
 .vscode/
+.idea/
+
+# model artifacts if you will use Git LFS instead:
+# Uncomment if you decide NOT to use LFS and want them in repo:
+# models/*.h5
+# models/*.pkl

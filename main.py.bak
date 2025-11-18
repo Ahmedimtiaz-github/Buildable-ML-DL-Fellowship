@@ -1,0 +1,81 @@
+﻿# main.py
+import os
+import json
+import tempfile
+from typing import Optional
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from pydantic import BaseModel
+from pathlib import Path
+
+# Import your agent query function
+# It should already be available in src.agent_pipeline
+from src.agent_pipeline import query_agent
+
+app = FastAPI(title="Agent Pipeline API (JSON + Form)")
+
+MODELS_DIR = Path(__file__).resolve().parents[0] / "models"
+UPLOADS_DIR = Path(__file__).resolve().parents[0] / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
+
+class AgentJSONRequest(BaseModel):
+    question: str
+    top_k: Optional[int] = 5
+    llm: Optional[str] = "auto"
+    # optional local path to an image (if you want to avoid multipart upload)
+    image_path: Optional[str] = None
+
+@app.post("/agent")
+async def agent_json(req: AgentJSONRequest):
+    """
+    Accepts application/json bodies:
+    { "question": "...", "top_k": 3, "llm": "local", "image_path": "/path/to/file.jpg" }
+    """
+    if not req.question:
+        raise HTTPException(status_code=422, detail="Field 'question' is required.")
+    # call your agent pipeline
+    try:
+        out = query_agent(req.question, top_k=req.top_k, llm=req.llm, image_path=req.image_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return out
+
+@app.post("/agent/form")
+async def agent_form(
+    question: str = Form(...),
+    top_k: int = Form(5),
+    llm: str = Form("auto"),
+    file: Optional[UploadFile] = File(None),
+):
+    """
+    Accepts multipart/form-data (for uploads).
+    Fields: question, top_k, llm, file (optional)
+    Saves file to ./uploads/ and passes path to agent.
+    """
+    if not question:
+        raise HTTPException(status_code=422, detail="Field 'question' is required.")
+    saved_path = None
+    if file is not None:
+        filename = Path(file.filename).name
+        dest = UPLOADS_DIR / filename
+        with open(dest, "wb") as fh:
+            fh.write(await file.read())
+        saved_path = str(dest.resolve())
+    try:
+        out = query_agent(question, top_k=top_k, llm=llm, image_path=saved_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return out
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+# CLI convenience
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cli", type=str, help="Run a single CLI query")
+    args = parser.parse_args()
+    if args.cli:
+        print("Running CLI query:", args.cli)
+        print(json.dumps(query_agent(args.cli, top_k=5, llm="local"), indent=2))

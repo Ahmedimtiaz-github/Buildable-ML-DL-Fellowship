@@ -1,0 +1,4 @@
+﻿query,gold_tool
+is this leaf diseased?,disease_detector_tool
+what to plant in sandy soil?,crop_predictor_tool
+how to plant rice?,rag_qa_tool
